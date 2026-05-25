@@ -1,0 +1,148 @@
+package com.workintech.s18d2;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workintech.s18d2.controller.FruitController;
+import com.workintech.s18d2.entity.Fruit;
+import com.workintech.s18d2.enums.FruitType;
+import com.workintech.s18d2.dao.FruitService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+
+
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.core.env.Environment;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+
+@AutoConfigureMockMvc
+@TestPropertySource(locations = "classpath:application.properties")
+@WebMvcTest(value = {ApplicationPropertiesAndControllerTests.class, FruitController.class})
+@ExtendWith(ResultAnalyzer2.class)
+class ApplicationPropertiesAndControllerTests {
+
+    @Autowired
+    private Environment env;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @MockBean
+    private FruitService fruitService;
+
+    private Fruit sampleFruit;
+
+    @BeforeEach
+    void setUp() {
+        sampleFruit = new Fruit();
+        sampleFruit.setId(1L);
+        sampleFruit.setName("Apple");
+        sampleFruit.setPrice(20.0);
+        sampleFruit.setFruitType(FruitType.SWEET);
+    }
+    @Test
+    @DisplayName("application properties istenilenler eklendi mi?")
+    void serverPortIsSetTo8585() {
+
+        String serverPort = env.getProperty("server.port");
+        assertThat(serverPort).isEqualTo("8585");
+
+
+        String datasourceUrl = env.getProperty("spring.datasource.url");
+        assertNotNull(datasourceUrl);
+
+        String datasourceUsername = env.getProperty("spring.datasource.username");
+        assertNotNull(datasourceUsername);
+
+        String datasourcePassword = env.getProperty("spring.datasource.password");
+        assertNotNull(datasourcePassword);
+
+        String hibernateDdlAuto = env.getProperty("spring.jpa.hibernate.ddl-auto");
+        assertNotNull(hibernateDdlAuto);
+
+
+    }
+
+    @Test
+    void testGetFruits() throws Exception {
+        // 1. Mock tanımı
+        given(fruitService.getByPriceAsc()).willReturn(List.of(sampleFruit));
+
+        // 2. Controller'daki @GetMapping (path'siz olan) metoduna istek atıyoruz
+        mockMvc.perform(get("/workintech/fruits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].name", is("Apple")));
+    }
+
+    @Test
+    void testGetFruitsDesc() throws Exception {
+        given(fruitService.getByPriceDesc()).willReturn(List.of(sampleFruit));
+        mockMvc.perform(get("/workintech/fruits/desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].name", is("Apple")));
+    }
+
+    @Test
+    void testGetFruitsByName() throws Exception {
+        given(fruitService.searchByName("Apple")).willReturn(List.of(sampleFruit));
+
+        // Yolu ve metodu Controller'a göre düzenledik
+        mockMvc.perform(post("/workintech/fruits/Apple"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].name", is("Apple")));
+    }
+
+    @Test
+    void testSaveFruit() throws Exception {
+        given(fruitService.save(any())).willReturn(sampleFruit);
+        mockMvc.perform(post("/workintech/fruits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(sampleFruit)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is("Apple")));
+    }
+
+    @Test
+    void testGetByIdSuccess() throws Exception {
+        given(fruitService.findById(1L)).willReturn(sampleFruit);
+        mockMvc.perform(get("/workintech/fruits/{id}", 1L))
+                .andExpect(status().isOk());
+    }
+
+
+
+    @Test
+    void testDeleteFruitSuccess() throws Exception {
+        when(fruitService.delete(anyLong())).thenReturn(sampleFruit);
+
+        mockMvc.perform(delete("/workintech/fruits/{id}", 1L)) // Burada perform kapatıldı
+                .andExpect(status().isOk()); // Zincirleme burada devam ediyor
+    }
+}
+
+
